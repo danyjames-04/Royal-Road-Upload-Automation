@@ -1,0 +1,3 @@
+# Ignore all chapter files except the sample
+chapters/*.txt
+!chapters/chapter_01.txt

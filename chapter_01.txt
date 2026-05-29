@@ -1,0 +1,8 @@
+Sample Chapter Title
+
+This is a sample chapter file showing the correct format.
+The title goes on the very first line.
+Then a blank line, then your content.
+
+You can have as many paragraphs as you like.
+Use Chapter_formatter.html to generate your real chapter files.
