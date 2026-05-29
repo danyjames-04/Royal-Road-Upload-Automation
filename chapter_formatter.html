@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chapter Formatter</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222;
+    --border: #2e2e2e;
+    --border2: #3a3a3a;
+    --text: #e8e4dc;
+    --muted: #888;
+    --hint: #555;
+    --accent: #c9a96e;
+    --accent-dim: #8a6f3f;
+    --success: #5a9e6f;
+    --mono: 'Courier New', Courier, monospace;
+    --sans: Georgia, 'Times New Roman', serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 720px;
+  }
+
+  header {
+    margin-bottom: 2.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+  }
+
+  header h1 {
+    font-size: 1.1rem;
+    font-weight: normal;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: var(--mono);
+  }
+
+  header p {
+    font-size: 0.8rem;
+    color: var(--hint);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+
+  .field { margin-bottom: 1.2rem; }
+
+  label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-family: var(--mono);
+    margin-bottom: 6px;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    padding: 10px 12px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.6;
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  textarea:focus {
+    border-color: var(--accent-dim);
+  }
+
+  input[type="number"] { width: 80px; }
+
+  textarea { resize: vertical; }
+
+  #chContent { height: 260px; }
+  #chAN { height: 100px; }
+
+  .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .ch-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 1.2rem;
+  }
+
+  .ch-row label { margin-bottom: 0; }
+
+  .btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    padding: 8px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:active { opacity: 0.7; }
+
+  .btn-primary {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-dim);
+    color: var(--bg);
+  }
+
+  .btn-small {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+  }
+
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 1.5rem; }
+
+  #statusMsg {
+    font-size: 0.78rem;
+    font-family: var(--mono);
+    color: var(--success);
+    display: none;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2rem 0;
+  }
+
+  .an-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .an-header label { margin-bottom: 0; }
+
+  .an-note {
+    font-size: 0.72rem;
+    color: var(--hint);
+    font-family: var(--mono);
+    margin-top: 4px;
+  }
+
+  .preview-box {
+    display: none;
+    margin-top: 2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .preview-header {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .preview-header span {
+    font-size: 0.72rem;
+    color: var(--hint);
+    font-family: var(--mono);
+  }
+
+  pre#previewContent {
+    padding: 1.2rem 1.4rem;
+    font-family: var(--mono);
+    font-size: 0.83rem;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  footer {
+    margin-top: 3rem;
+    font-size: 0.7rem;
+    color: var(--hint);
+    font-family: var(--mono);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Chapter Formatter</h1>
+    <p>Royal Road upload formatter — works offline</p>
+  </header>
+
+  <div class="ch-row">
+    <label>Ch no.</label>
+    <input type="number" id="chNum" min="1" value="1" />
+    <button class="btn btn-small" onclick="step(-1)">−</button>
+    <button class="btn btn-small" onclick="step(1)">+</button>
+  </div>
+
+  <div class="field">
+    <label>Title</label>
+    <input type="text" id="chTitle" placeholder="Chapter title" />
+  </div>
+
+  <div class="field">
+    <label>Content</label>
+    <textarea id="chContent" placeholder="Paste your finished chapter here..."></textarea>
+  </div>
+
+
+
+  <div class="field">
+    <div class="an-header">
+      <label>Author's note</label>
+      <button class="btn btn-small" onclick="toggleAN()" id="anToggle">lock</button>
+    </div>
+    <textarea id="chAN" style="height:120px"></textarea>
+    <p class="an-note" id="anNote"></p>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" onclick="downloadChapter()">↓ download .txt</button>
+    <button class="btn" onclick="previewChapter()">preview</button>
+    <button class="btn" onclick="clearContent()">clear content</button>
+    <span id="statusMsg">✓ saved — chapter incremented</span>
+  </div>
+
+  <div class="preview-box" id="previewBox">
+    <div class="preview-header">
+      <span id="previewFilename">Ch_1_title.txt</span>
+      <button class="btn btn-small" onclick="document.getElementById('previewBox').style.display='none'">close</button>
+    </div>
+    <pre id="previewContent"></pre>
+  </div>
+
+  <footer>open in any browser · no internet needed · data never leaves your device</footer>
+
+</div>
+
+<script>
+  const FIXED_AN = `A/N:
+If you are enjoying the start of the story.
+Drop some stones to help this book reach higher.
+You can read upto 20+ Chapters. + Images
+You can also read "+5 Free Chapters".
+patreon/Dark_sym`;
+
+  let anLocked = false;
+
+  function toggleAN() {
+    anLocked = !anLocked;
+    const ta = document.getElementById('chAN');
+    const btn = document.getElementById('anToggle');
+    const note = document.getElementById('anNote');
+    ta.readOnly = anLocked;
+    ta.style.opacity = anLocked ? '0.55' : '1';
+    btn.textContent = anLocked ? 'unlock' : 'lock';
+    note.textContent = anLocked ? 'locked — AN will not change between chapters' : '';
+  }
+
+  function step(n) {
+    const el = document.getElementById('chNum');
+    el.value = Math.max(1, parseInt(el.value || 1) + n);
+  }
+
+  function buildText() {
+    const num = document.getElementById('chNum').value.trim() || '?';
+    const title = document.getElementById('chTitle').value.trim();
+    const content = document.getElementById('chContent').value.trim();
+    const an = document.getElementById('chAN').value.trim();
+
+    return `Ch ${num} ${title}\n\n${content}\n\n${an}`;
+  }
+
+  function getFilename() {
+    const num = parseInt(document.getElementById('chNum').value || 1);
+    const padded = String(num).padStart(2, '0');
+    return `chapter_${padded}.txt`;
+  }
+
+  function downloadChapter() {
+    const text = buildText();
+    const filename = getFilename();
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+
+    const num = parseInt(document.getElementById('chNum').value || 1);
+    document.getElementById('chNum').value = num + 1;
+
+    clearContent();
+
+    const msg = document.getElementById('statusMsg');
+    msg.style.display = 'inline';
+    setTimeout(() => msg.style.display = 'none', 2800);
+  }
+
+  function previewChapter() {
+    const text = buildText();
+    document.getElementById('previewContent').textContent = text;
+    document.getElementById('previewFilename').textContent = getFilename();
+    document.getElementById('previewBox').style.display = 'block';
+  }
+
+  function clearContent() {
+    document.getElementById('chTitle').value = '';
+    document.getElementById('chContent').value = '';
+    if (!anLocked) document.getElementById('chAN').value = '';
+    document.getElementById('previewBox').style.display = 'none';
+  }
+</script>
+</body>
+</html>
