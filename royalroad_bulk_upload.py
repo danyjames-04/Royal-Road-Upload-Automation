@@ -1,6 +1,6 @@
 """
-Royal Road Bulk Chapter Draft Creator
-======================================
+Royal Road Bulk Chapter Draft Creator with Auto-Scheduling
+===========================================================
 SETUP:
 1. Install Python: https://www.python.org/downloads/
 2. Open Command Prompt and run:
@@ -18,15 +18,20 @@ CHAPTER FILE FORMAT:
 import os
 import time
 import glob
+from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 
 # ============================================================
 #  CONFIG
 # ============================================================
 
-FICTION_ID = "170220"
-CHAPTERS_FOLDER = "chapters"
-DELAY_BETWEEN_CHAPTERS = 3
+FICTION_ID       = "148721"
+CHAPTERS_FOLDER  = "chapters"
+DELAY_BETWEEN_CHAPTERS = 3  # seconds between uploads
+
+# Scheduling — chapter 1 on START_DATE, chapter 2 one day later, etc.
+START_DATE   = "2026-06-20"   # Format: YYYY-MM-DD
+RELEASE_TIME = "21:30"        # Format: HH:MM (24-hour)
 
 # ============================================================
 
@@ -46,22 +51,20 @@ def read_chapter_file(filepath):
     return title, content
 
 
-def create_draft(page, fiction_id, title, content):
+def create_draft(page, fiction_id, title, content, publish_datetime):
     url = f"https://www.royalroad.com/author-dashboard/chapters/new/{fiction_id}"
-    page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    time.sleep(5)  # Wait for TinyMCE to fully load
+    page.goto(url, wait_until="commit", timeout=0)
+    time.sleep(5)
 
     # Fill title
     page.wait_for_selector("input[name='Title']", timeout=15000)
     page.fill("input[name='Title']", title)
-    print(f"    Title filled: {title}")
+    print(f"    Title: {title}")
 
-    # Fill TinyMCE content editor via its iframe
-    # TinyMCE renders inside an iframe with id="contentEditor_ifr"
-    content_escaped = content.replace("'", "\\'").replace("\n", "<br>")
+    # Fill TinyMCE content editor
+    content_escaped = content.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "<br>").replace("\r", "")
     injected = page.evaluate(f"""
         () => {{
-            // Try TinyMCE API first
             if (typeof tinymce !== 'undefined') {{
                 var editors = tinymce.editors;
                 for (var i = 0; i < editors.length; i++) {{
@@ -71,13 +74,11 @@ def create_draft(page, fiction_id, title, content):
                         return 'tinymce:' + ed.id;
                     }}
                 }}
-                // fallback: use first non-notes editor
                 if (editors.length > 0) {{
                     editors[0].setContent('{content_escaped}');
                     return 'tinymce:first';
                 }}
             }}
-            // Try iframe body directly
             var iframe = document.querySelector('iframe#contentEditor_ifr');
             if (iframe) {{
                 iframe.contentDocument.body.innerHTML = '{content_escaped}';
@@ -87,13 +88,42 @@ def create_draft(page, fiction_id, title, content):
         }}
     """)
     print(f"    Content injected via: {injected}")
-
     if injected == 'not_found':
         raise Exception("Could not find TinyMCE editor")
 
+    # Set scheduled release date/time
+    # Royal Road's scheduled release field is a datetime-local input
+    dt_str = publish_datetime.strftime("%Y-%m-%dT%H:%M")
+    scheduled = page.evaluate(f"""
+        () => {{
+            // Try common selectors for the scheduled release input
+            var selectors = [
+                'input[name="PublishDate"]',
+                'input[name="scheduledDate"]',
+                'input[type="datetime-local"]',
+                'input[id*="publish" i]',
+                'input[id*="schedule" i]',
+                'input[name*="publish" i]',
+                'input[name*="schedule" i]'
+            ];
+            for (var s of selectors) {{
+                var el = document.querySelector(s);
+                if (el) {{
+                    var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    nativeInputValueSetter.call(el, '{dt_str}');
+                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    return s;
+                }}
+            }}
+            return 'not_found';
+        }}
+    """)
+    print(f"    Schedule set to {publish_datetime.strftime('%Y-%m-%d %H:%M')} via: {scheduled}")
+
     time.sleep(1)
 
-    # Click Save as Draft button (top right upload arrow button)
+    # Save as Draft
     page.evaluate("window.scrollTo(0, 0)")
     time.sleep(1)
 
@@ -102,7 +132,6 @@ def create_draft(page, fiction_id, title, content):
         "button:has-text('Save as Draft')",
         "input[value='Save as Draft']",
         "button[title*='Draft' i]",
-        "button[title*='Save' i]",
         "input[value*='Draft']",
         "button:has-text('Draft')",
         ".btn:has-text('Draft')",
@@ -112,20 +141,19 @@ def create_draft(page, fiction_id, title, content):
             if el.count() > 0:
                 el.click()
                 saved = True
-                print(f"    Clicked: {sel}")
+                print(f"    Saved via: {sel}")
                 break
         except:
             continue
 
     if not saved:
-        # Screenshot bottom of page to see buttons
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         time.sleep(1)
         page.screenshot(path="buttons_screenshot.png")
         raise Exception("Could not find Save as Draft button — check buttons_screenshot.png")
 
     page.wait_for_timeout(3000)
-    print(f"  ✓ Saved draft: {title}")
+    print(f"  ✓ Draft saved: {title} — scheduled for {publish_datetime.strftime('%Y-%m-%d %H:%M')}")
 
 
 def main():
@@ -135,8 +163,16 @@ def main():
         print(f"ERROR: No .txt files found in '{CHAPTERS_FOLDER}' folder.")
         return
 
+    # Build schedule — one chapter per day starting from START_DATE
+    start_dt = datetime.strptime(f"{START_DATE} {RELEASE_TIME}", "%Y-%m-%d %H:%M")
+    schedule = [start_dt + timedelta(days=i) for i in range(len(files))]
+
     print(f"Found {len(files)} chapter file(s).")
-    print(f"Uploading to fiction ID: {FICTION_ID}\n")
+    print(f"Fiction ID: {FICTION_ID}")
+    print(f"Schedule preview:")
+    for i, (f, dt) in enumerate(zip(files, schedule), 1):
+        print(f"  Chapter {i}: {os.path.basename(f)} → {dt.strftime('%Y-%m-%d %H:%M')}")
+    print()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -146,17 +182,16 @@ def main():
         )
         page = browser.new_page()
 
-        # Manual login
         print("A browser window has opened.")
         print("Please log in to Royal Road with your Google account.")
         print("Once you are on your dashboard, come back here and press Enter.\n")
-        page.goto("https://www.royalroad.com/account/login", wait_until="domcontentloaded", timeout=60000)
+        page.goto("https://www.royalroad.com/account/login", wait_until="commit", timeout=0)
 
         input("Press Enter once you are logged in...")
         print("\nStarting uploads...\n")
 
         failed = []
-        for i, filepath in enumerate(files, 1):
+        for i, (filepath, publish_dt) in enumerate(zip(files, schedule), 1):
             filename = os.path.basename(filepath)
             print(f"[{i}/{len(files)}] Processing: {filename}")
             try:
@@ -165,7 +200,7 @@ def main():
                     print(f"  ✗ Skipped (missing title or content)")
                     failed.append(filename)
                     continue
-                create_draft(page, FICTION_ID, title, content)
+                create_draft(page, FICTION_ID, title, content, publish_dt)
                 time.sleep(DELAY_BETWEEN_CHAPTERS)
             except Exception as e:
                 print(f"  ✗ Failed: {e}")
@@ -174,7 +209,7 @@ def main():
         browser.close()
 
     print("\n=============================")
-    print(f"Done! {len(files) - len(failed)}/{len(files)} chapters saved as drafts.")
+    print(f"Done! {len(files) - len(failed)}/{len(files)} chapters scheduled as drafts.")
     if failed:
         print(f"\nFailed files:")
         for f in failed:
