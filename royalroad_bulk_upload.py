@@ -25,7 +25,7 @@ from playwright.sync_api import sync_playwright
 #  CONFIG
 # ============================================================
 
-FICTION_ID       = "148721"
+FICTION_ID       = "148722"
 CHAPTERS_FOLDER  = "chapters"
 DELAY_BETWEEN_CHAPTERS = 3  # seconds between uploads
 
