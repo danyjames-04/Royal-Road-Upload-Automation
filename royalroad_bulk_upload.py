@@ -4,36 +4,232 @@ Royal Road Bulk Chapter Draft Creator with Auto-Scheduling
 SETUP:
 1. Install Python: https://www.python.org/downloads/
 2. Open Command Prompt and run:
-      pip install playwright
+      pip install playwright python-dotenv
       python -m playwright install chromium
-3. Put your chapter .txt files in the 'chapters' folder
-4. Run: python royalroad_bulk_upload.py
+3. Put your chapter .txt files in the 'chapters' folder (or set CHAPTERS_FOLDER in .env)
+4. Edit .env with your Fiction ID and preferred defaults
+5. Run: python royalroad_bulk_upload.py
 
 CHAPTER FILE FORMAT:
    Line 1:  Chapter Title
    Line 2:  (blank)
    Line 3+: Chapter content
+
+.ENV FILE (optional overrides):
+   FICTION_ID              - Your Royal Road fiction ID
+   CHAPTERS_FOLDER         - Folder containing chapter .txt files (default: chapters)
+   RELEASE_TIME            - Default release time in HH:MM 24-hour format (default: 21:30)
+   DELAY_BETWEEN_CHAPTERS  - Seconds to wait between uploads (default: 3)
 """
 
 import os
 import time
 import glob
 from datetime import datetime, timedelta
+from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-# ============================================================
-#  CONFIG
-# ============================================================
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # .env is optional; values will be prompted if missing
 
-FICTION_ID       = "148721"
-CHAPTERS_FOLDER  = "chapters"
-DELAY_BETWEEN_CHAPTERS = 3  # seconds between uploads
-
-# Scheduling — chapter 1 on START_DATE, chapter 2 one day later, etc.
-START_DATE   = "2026-06-20"   # Format: YYYY-MM-DD
-RELEASE_TIME = "21:30"        # Format: HH:MM (24-hour)
 
 # ============================================================
+#  HELPERS
+# ============================================================
+
+def prompt(label, default=None, required=True):
+    """Prompt the user for input, showing the default if one exists."""
+    if default:
+        value = input(f"  {label} [{default}]: ").strip()
+        return value if value else default
+    else:
+        while True:
+            value = input(f"  {label}: ").strip()
+            if value or not required:
+                return value
+            print("    (required — please enter a value)")
+
+
+def prompt_int(label, default=None, min_val=1):
+    while True:
+        raw = prompt(label, default=str(default) if default is not None else None)
+        try:
+            val = int(raw)
+            if val >= min_val:
+                return val
+            print(f"    (must be at least {min_val})")
+        except ValueError:
+            print("    (please enter a whole number)")
+
+
+def pick_date_gui(title="Pick a date"):
+    """Open a calendar popup. Returns 'YYYY-MM-DD' string, or None if unavailable/cancelled."""
+    try:
+        import tkinter as tk
+        from tkcalendar import Calendar
+
+        result = []
+
+        def on_select():
+            result.append(cal.selection_get().strftime("%Y-%m-%d"))
+            root.destroy()
+
+        def on_close():
+            root.destroy()
+
+        root = tk.Tk()
+        root.title(title)
+        root.resizable(False, False)
+        root.protocol("WM_DELETE_WINDOW", on_close)
+
+        cal = Calendar(root, selectmode="day", date_pattern="yyyy-mm-dd")
+        cal.pack(padx=12, pady=12)
+
+        tk.Button(root, text="Confirm date", command=on_select, width=20).pack(pady=(0, 10))
+        root.mainloop()
+
+        return result[0] if result else None
+
+    except ImportError:
+        return None
+
+
+def prompt_date(label, default=None):
+    picked = pick_date_gui(label)
+    if picked:
+        print(f"  {label}: {picked}  (selected via calendar)")
+        return picked
+
+    # Fallback: typed input in dd/mm/yyyy
+    while True:
+        raw = prompt(f"{label} (dd/mm/yyyy)", default=default)
+        # Accept dd/mm/yyyy or yyyy-mm-dd
+        for fmt, out_fmt in [("%d/%m/%Y", "%Y-%m-%d"), ("%Y-%m-%d", "%Y-%m-%d")]:
+            try:
+                return datetime.strptime(raw, fmt).strftime(out_fmt)
+            except ValueError:
+                continue
+        print("    (use dd/mm/yyyy format, e.g. 16/06/2026)")
+
+
+def prompt_time(label, default=None):
+    while True:
+        raw = prompt(label, default=default)
+        try:
+            datetime.strptime(raw, "%H:%M")
+            return raw
+        except ValueError:
+            print("    (use HH:MM 24-hour format, e.g. 21:30)")
+
+
+def load_config():
+    """Load config from .env with interactive fallback for missing values."""
+    print("=" * 55)
+    print("  Royal Road Bulk Upload — Configuration")
+    print("=" * 55)
+    print("  (Press Enter to accept a [default] value)\n")
+
+    fiction_id = prompt(
+        "Fiction ID",
+        default=os.getenv("FICTION_ID"),
+    )
+
+    chapters_folder = prompt(
+        "Chapters folder",
+        default=os.getenv("CHAPTERS_FOLDER", "chapters"),
+    )
+
+    start_date = prompt_date(
+        "Start date (first chapter release)",
+        default=os.getenv("START_DATE"),
+    )
+
+    release_time = prompt_time(
+        "Release time (HH:MM, 24-hour)",
+        default=os.getenv("RELEASE_TIME", "21:30"),
+    )
+
+    freq_days = prompt_int(
+        "Days between releases",
+        default=int(os.getenv("FREQ_DAYS", "2")),
+        min_val=1,
+    )
+
+    delay = prompt_int(
+        "Delay between uploads (seconds)",
+        default=int(os.getenv("DELAY_BETWEEN_CHAPTERS", "3")),
+        min_val=0,
+    )
+
+    print()
+    return {
+        "fiction_id": fiction_id,
+        "chapters_folder": chapters_folder,
+        "start_date": start_date,
+        "release_time": release_time,
+        "freq_days": freq_days,
+        "delay": delay,
+    }
+
+
+# ============================================================
+#  CORE
+# ============================================================
+
+def login(page):
+    """Auto-login using .env credentials, or wait for manual login."""
+    email    = os.getenv("RR_EMAIL", "").strip()
+    password = os.getenv("RR_PASSWORD", "").strip()
+
+    page.goto("https://www.royalroad.com/account/login", wait_until="commit", timeout=0)
+
+    if email and password:
+        print("Auto-login: filling credentials ...")
+        try:
+            page.wait_for_selector("input[name='Email']", timeout=10000)
+            page.fill("input[name='Email']", email)
+            page.fill("input[name='Password']", password)
+
+            # Click the login submit button that is inside the credentials form,
+            # not the Google OAuth button which also has type="submit"
+            submitted = False
+            for sel in [
+                "form:has(input[name='Email']) button[type='submit']",
+                "form:has(input[name='Password']) button[type='submit']",
+                "button:has-text('Login')",
+                "button:has-text('Sign In')",
+                "button:has-text('Log In')",
+                "input[type='submit'][value*='Login' i]",
+                "input[type='submit'][value*='Sign' i]",
+            ]:
+                try:
+                    el = page.locator(sel).first
+                    if el.count() > 0:
+                        el.click()
+                        submitted = True
+                        break
+                except:
+                    continue
+
+            if not submitted:
+                raise Exception("Could not find the login submit button")
+
+            page.wait_for_url(lambda url: "/account/login" not in url, timeout=15000)
+            print("Auto-login: success.\n")
+        except Exception as e:
+            print(f"Auto-login failed ({e}).")
+            print("Please finish logging in manually, then press Enter.\n")
+            input("Press Enter once you are logged in...")
+            print()
+    else:
+        print("No credentials in .env — please log in manually in the browser.")
+        print("Once you are on your dashboard, come back here and press Enter.\n")
+        input("Press Enter once you are logged in...")
+        print()
+
 
 def read_chapter_file(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
@@ -92,11 +288,9 @@ def create_draft(page, fiction_id, title, content, publish_datetime):
         raise Exception("Could not find TinyMCE editor")
 
     # Set scheduled release date/time
-    # Royal Road's scheduled release field is a datetime-local input
     dt_str = publish_datetime.strftime("%Y-%m-%dT%H:%M")
     scheduled = page.evaluate(f"""
         () => {{
-            // Try common selectors for the scheduled release input
             var selectors = [
                 'input[name="PublishDate"]',
                 'input[name="scheduledDate"]',
@@ -157,38 +351,36 @@ def create_draft(page, fiction_id, title, content, publish_datetime):
 
 
 def main():
-    files = sorted(glob.glob(os.path.join(CHAPTERS_FOLDER, "*.txt")))
+    cfg = load_config()
 
+    files = sorted(glob.glob(os.path.join(cfg["chapters_folder"], "*.txt")))
     if not files:
-        print(f"ERROR: No .txt files found in '{CHAPTERS_FOLDER}' folder.")
+        print(f"ERROR: No .txt files found in '{cfg['chapters_folder']}' folder.")
         return
 
-    # Build schedule — one chapter per day starting from START_DATE
-    start_dt = datetime.strptime(f"{START_DATE} {RELEASE_TIME}", "%Y-%m-%d %H:%M")
-    schedule = [start_dt + timedelta(days=i) for i in range(len(files))]
+    start_dt = datetime.strptime(f"{cfg['start_date']} {cfg['release_time']}", "%Y-%m-%d %H:%M")
+    schedule = [start_dt + timedelta(days=i * cfg["freq_days"]) for i in range(len(files))]
 
     print(f"Found {len(files)} chapter file(s).")
-    print(f"Fiction ID: {FICTION_ID}")
+    print(f"Fiction ID : {cfg['fiction_id']}")
     print(f"Schedule preview:")
     for i, (f, dt) in enumerate(zip(files, schedule), 1):
         print(f"  Chapter {i}: {os.path.basename(f)} → {dt.strftime('%Y-%m-%d %H:%M')}")
     print()
 
+    confirm = input("Proceed with upload? [Y/n]: ").strip().lower()
+    if confirm == "n":
+        print("Aborted.")
+        return
+    print()
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=False,
-            channel="chrome",
-            slow_mo=50
-        )
+        browser = p.chromium.launch(headless=False, channel="chrome", slow_mo=50)
         page = browser.new_page()
 
-        print("A browser window has opened.")
-        print("Please log in to Royal Road with your Google account.")
-        print("Once you are on your dashboard, come back here and press Enter.\n")
-        page.goto("https://www.royalroad.com/account/login", wait_until="commit", timeout=0)
-
-        input("Press Enter once you are logged in...")
-        print("\nStarting uploads...\n")
+        print("A browser window has opened.\n")
+        login(page)
+        print("Starting uploads...\n")
 
         failed = []
         for i, (filepath, publish_dt) in enumerate(zip(files, schedule), 1):
@@ -200,8 +392,8 @@ def main():
                     print(f"  ✗ Skipped (missing title or content)")
                     failed.append(filename)
                     continue
-                create_draft(page, FICTION_ID, title, content, publish_dt)
-                time.sleep(DELAY_BETWEEN_CHAPTERS)
+                create_draft(page, cfg["fiction_id"], title, content, publish_dt)
+                time.sleep(cfg["delay"])
             except Exception as e:
                 print(f"  ✗ Failed: {e}")
                 failed.append(filename)
@@ -215,7 +407,7 @@ def main():
         for f in failed:
             print(f"  - {f}")
     print(f"\nCheck your drafts at:")
-    print(f"  https://www.royalroad.com/fiction/{FICTION_ID}/chapters")
+    print(f"  https://www.royalroad.com/fiction/{cfg['fiction_id']}/chapters")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@
 1. Press `Win + R`, type `cmd`, press Enter
 2. Paste this and press Enter:
    ```
-   pip install playwright && python -m playwright install chromium
+   pip install playwright python-dotenv tkcalendar && python -m playwright install chromium
    ```
 3. Wait for it to finish (may take a minute)
 ---
@@ -40,35 +40,51 @@ A sample file `chapters/chapter_01.txt` is already in the folder so you can see 
 
 > **Note:** The `chapters/` folder is listed in `.gitignore` — your chapter files will not be uploaded to GitHub. Only the folder itself (with the sample) is tracked.
 ---
-### STEP 4 — Edit the script config
-Open `royalroad_bulk_upload.py` in Notepad (or any text editor).
-Find the CONFIG section near the top and fill in:
-```python
-FICTION_ID = "123456"
+### STEP 4 — Configure the `.env` file
+Open the `.env` file in the repo root and fill in your details:
 ```
+FICTION_ID=123456
+CHAPTERS_FOLDER=chapters
+RELEASE_TIME=21:30
+DELAY_BETWEEN_CHAPTERS=3
+
+RR_EMAIL=your@email.com
+RR_PASSWORD=yourpassword
+```
+
 **How to find your FICTION_ID:**
 - Go to your story on Royal Road
 - Look at the URL: `royalroad.com/fiction/123456/your-story-name`
 - The number after `/fiction/` is your ID
+
+> **Note:** `.env` is listed in `.gitignore` — your credentials will never be committed to GitHub.
+
+You can also set `START_DATE` (YYYY-MM-DD) and `FREQ_DAYS` (number) here to skip those prompts each run.
 ---
 ### STEP 5 — Run the script
 1. Open Command Prompt in the folder where you saved the script
-   - You can do this by holding Shift and right-clicking the folder, then choosing "Open PowerShell window here"
+   - Hold Shift and right-click the folder → "Open PowerShell window here"
 2. Type:
    ```
    python royalroad_bulk_upload.py
    ```
-3. A browser window will open — you can watch it log in and create each draft (Login easier with direct login instead of Google Auth)
-4. When it's done, it will print a summary of how many chapters were saved
+3. The script will ask you a few questions (start date, release frequency, etc.)
+   - A **calendar popup** will appear for picking the start date — just click a day and confirm
+   - Press Enter to accept any `[default]` value shown in brackets
+4. A browser window opens and logs in automatically using your `.env` credentials
+5. The script creates each chapter as a scheduled draft — you can watch it work
 ---
 ### After it finishes
-Go to your Royal Road author dashboard and you'll see all your chapters saved as drafts, ready for you to review and schedule/publish whenever you want.
+Go to your Royal Road author dashboard and you'll see all your chapters saved as drafts, ready for you to review and publish whenever you want.
 ---
 ### Troubleshooting
 | Problem | Fix |
 |---|---|
 | `python not found` | Reinstall Python and check "Add to PATH" |
 | `pip not found` | Same as above |
-| Login fails | Double-check your email/password in the config |
+| `No module named dotenv` | Run `pip install python-dotenv` |
+| `No module named tkcalendar` | Run `pip install tkcalendar` |
+| Auto-login fails | Check your email/password in `.env`; script will fall back to manual login |
 | Chapter skipped | Make sure the .txt file has a title on line 1 |
-| Editor not found | Royal Road may have updated — let me know and I'll fix the script |
+| Editor not found | Royal Road may have updated their site — open an issue and I'll fix the script |
+| `buttons_screenshot.png` created | The save-draft button wasn't found — check the screenshot for what's on screen |

@@ -1,0 +1,17 @@
+# Credentials & config — never commit these
+.env
+
+# Chapter files (keep only the sample)
+chapters/*.txt
+!chapters/chapter_01.txt
+
+# Raw/unformatted chapter dumps
+New folder/
+
+# Script artefacts
+buttons_screenshot.png
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
