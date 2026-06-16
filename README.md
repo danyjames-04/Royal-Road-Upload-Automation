@@ -61,23 +61,11 @@ RR_PASSWORD=yourpassword
 ```
 =======
 
-### STEP 4 — Edit the script config
-Open `royalroad_bulk_upload.py` in Notepad (or any text editor).
-
-Find the CONFIG section near the top and fill in:
-```python
-FICTION_ID   = "123456"       # Your fiction ID (see below)
-START_DATE   = "2025-07-01"   # Date to publish the first chapter (YYYY-MM-DD)
-RELEASE_TIME = "12:00"        # Time to publish each chapter (24-hour format, e.g. 14:30 = 2:30 PM)
-```
->>>>>>> 9644d2ca379187bb44ed1b572325977030d97974
-
 **How to find your FICTION_ID:**
 - Go to your story on Royal Road
 - Look at the URL: `royalroad.com/fiction/123456/your-story-name`
 - The number after `/fiction/` is your ID
 
-<<<<<<< HEAD
 > **Note:** `.env` is listed in `.gitignore` — your credentials will never be committed to GitHub.
 
 You can also set `START_DATE` (YYYY-MM-DD) and `FREQ_DAYS` (number) here to skip those prompts each run.
@@ -110,7 +98,6 @@ Chapter 3  →  2025-07-03 12:00
    ```
    python royalroad_bulk_upload.py
    ```
-<<<<<<< HEAD
 3. The script will ask you a few questions (start date, release frequency, etc.)
    - A **calendar popup** will appear for picking the start date — just click a day and confirm
    - Press Enter to accept any `[default]` value shown in brackets
@@ -126,8 +113,6 @@ Chapter 3  →  2025-07-03 12:00
 ---
 
 ### After it finishes
-<<<<<<< HEAD
-Go to your Royal Road author dashboard and you'll see all your chapters saved as drafts, ready for you to review and publish whenever you want.
 =======
 Go to your Royal Road author dashboard and you'll see all your chapters saved as drafts with their scheduled publish dates already filled in. They will go live automatically on their scheduled dates — no further action needed.
 
